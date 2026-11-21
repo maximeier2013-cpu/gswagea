@@ -40,7 +40,7 @@ public final class RandomChaos implements ModInitializer {
             Items.EMERALD, Items.BREAD, Items.APPLE, Items.ENDER_PEARL,
             Items.OBSIDIAN, Items.REDSTONE, Items.LAPIS_LAZULI,
             Items.BONE, Items.STRING, Items.COAL, Items.SLIME_BALL,
-            Items.GOLDEN_APPLE, Items.COPPER_INGOT, Items.WHEAT,
+            Items.GOLDEN_APPLE, Items.ENCHANTED_GOLDEN_APPLE, Items.COPPER_INGOT, Items.WHEAT,
             Items.NETHERITE_SCRAP, Items.FEATHER, Items.SAND
     );
     private static final String[] MOBS = {
@@ -76,19 +76,29 @@ public final class RandomChaos implements ModInitializer {
             }
         });
 
-        // Only actual block/entity loot tables, not chests or other loot sources.
+        // A block type always drops the SAME randomly assigned item in this world.
+        // The mapping is derived from world seed + loot table ID, so it survives restarts.
+        // Mob drops still change each time, but only after stage 2 is unlocked.
         LootTableEvents.MODIFY_DROPS.register((holder, context, drops) -> {
-            if (!running || activeServer == null || drops.isEmpty()) return;
-            String path = holder.unwrapKey().map(key -> key.identifier().getPath()).orElse("");
-            boolean block = path.startsWith("blocks/");
-            boolean mob = path.startsWith("entities/");
-            if ((!block || stage < 1) && (!mob || stage < 2)) return;
-            // Only change most drops so players can sometimes obtain vanilla resources.
-            if (RNG.nextInt(100) >= 85) return;
-            int count = Math.min(4, Math.max(1, drops.size()));
-            drops.clear();
-            for (int i = 0; i < count; i++) {
-                drops.add(new ItemStack(RANDOM_ITEMS.get(RNG.nextInt(RANDOM_ITEMS.size())), 1 + RNG.nextInt(3)));
+            if (!running || activeServer == null) return;
+            String id = holder.unwrapKey().map(key -> key.identifier().toString()).orElse("");
+            boolean block = id.startsWith("minecraft:blocks/");
+            boolean mob = id.startsWith("minecraft:entities/");
+            if (block && stage >= 1) {
+                long worldSeed = activeServer.overworld().getSeed();
+                long mixedSeed = worldSeed ^ (0x9E3779B97F4A7C15L * id.hashCode());
+                Random fixedRandom = new Random(mixedSeed);
+                Item item = RANDOM_ITEMS.get(fixedRandom.nextInt(RANDOM_ITEMS.size()));
+                int amount = 1 + fixedRandom.nextInt(3);
+                drops.clear();
+                drops.add(new ItemStack(item, amount));
+            } else if (mob && stage >= 2) {
+                if (drops.isEmpty()) return;
+                int count = Math.min(4, Math.max(1, drops.size()));
+                drops.clear();
+                for (int i = 0; i < count; i++) {
+                    drops.add(new ItemStack(RANDOM_ITEMS.get(RNG.nextInt(RANDOM_ITEMS.size())), 1 + RNG.nextInt(3)));
+                }
             }
         });
 
