@@ -30,7 +30,7 @@ public final class RandomChaos implements ModInitializer {
     private static MinecraftServer activeServer;
     private static long ticks;
     private static int stage;
-    private static boolean running = true;
+    private static boolean running = false;
     private static int currentSpeed = 3;
 
     // These are harmless vanilla items, plus a few rare rewards.
@@ -64,7 +64,7 @@ public final class RandomChaos implements ModInitializer {
             activeServer = server;
             ticks = 0;
             stage = 0;
-            running = true;
+            running = false;
             currentSpeed = 3;
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> activeServer = null);
@@ -103,6 +103,25 @@ public final class RandomChaos implements ModInitializer {
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            dispatcher.register(Commands.literal("challenge")
+                .then(Commands.literal("start").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
+                    if (running) {
+                        ctx.getSource().sendFailure(Component.literal("Challenge läuft bereits. Zeit: " + formatTime(ticks)));
+                        return 0;
+                    }
+                    running = true;
+                    announce(ctx.getSource().getServer(), "Challenge gestartet! Viel Erfolg! Timer läuft.");
+                    return Command.SINGLE_SUCCESS;
+                }))
+                .then(Commands.literal("restart").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
+                    resetChallenge(ctx.getSource().getServer());
+                    return Command.SINGLE_SUCCESS;
+                }))
+                .then(Commands.literal("timer").executes(ctx -> {
+                    ctx.getSource().sendSuccess(() -> Component.literal("Challenge-Zeit: " + formatTime(ticks) + (running ? " (läuft)" : " (angehalten)")), false);
+                    return Command.SINGLE_SUCCESS;
+                }))
+            );
             dispatcher.register(Commands.literal("chaos")
                 .then(Commands.literal("status").executes(ctx -> {
                     ctx.getSource().sendSuccess(() -> Component.literal(
@@ -135,6 +154,11 @@ public final class RandomChaos implements ModInitializer {
         if (ticks % STAGE_TICKS == 0) advance(server);
         if (ticks % 20 != 0) return;
 
+        String title = "§bRandomChaos §7| §f" + formatTime(ticks) + " §7| §eStufe " + stage + "/6";
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.displayClientMessage(Component.literal(title), true);
+        }
+
         if (stage >= 4 && RNG.nextInt(30) == 0) {
             List<ServerPlayer> players = server.getPlayerList().getPlayers();
             ServerPlayer player = players.get(RNG.nextInt(players.size()));
@@ -158,6 +182,40 @@ public final class RandomChaos implements ModInitializer {
             if (RNG.nextInt(5) == 0) execute(server, server.createCommandSourceStack(), "weather " + (RNG.nextBoolean() ? "rain" : "clear"));
             if (RNG.nextInt(5) == 0) execute(server, server.createCommandSourceStack(), "time set " + RNG.nextInt(24000));
         }
+    }
+
+    private static void resetChallenge(MinecraftServer server) {
+        running = false;
+        ticks = 0;
+        stage = 0;
+        currentSpeed = 3;
+
+        // The integrated Minecraft/NoRisk server cannot safely replace its open save.
+        // Only the player state and RandomChaos are reset here. Terrain remains unchanged.
+        var spawn = server.getSpawnPos().pos();
+        String spawnCoords = spawn.getX() + " " + spawn.getY() + " " + spawn.getZ();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            CommandSourceStack source = player.createCommandSourceStack();
+            execute(server, source, "clear @s");
+            execute(server, source, "effect clear @s");
+            execute(server, source, "experience set @s 0 levels");
+            execute(server, source, "experience set @s 0 points");
+            execute(server, source, "gamemode survival @s");
+            execute(server, source, "execute in minecraft:overworld run tp @s " + spawnCoords);
+            execute(server, source, "spawnpoint @s " + spawnCoords);
+            player.displayClientMessage(Component.literal("§bRandomChaos §7| §f00:00:00 §7| §eStufe 0/6"), true);
+        }
+        execute(server, server.createCommandSourceStack(), "gamerule randomTickSpeed 3");
+        execute(server, server.createCommandSourceStack(), "weather clear");
+        execute(server, server.createCommandSourceStack(), "time set day");
+        announce(server, "Challenge zurückgesetzt: Inventare leer, Spieler am Spawn, Timer 00:00:00, Chaos Stufe 0.");
+        announce(server, "WICHTIG: Gebaute/abgebaute Blöcke und Welt-Seed bleiben bei NoRisk bestehen. Für eine komplett neue Welt Minecraft beenden und neue Welt erzeugen.");
+        announce(server, "Mit /challenge start beginnt die neue Runde.");
+    }
+
+    private static String formatTime(long elapsedTicks) {
+        long seconds = elapsedTicks / 20;
+        return String.format(java.util.Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60);
     }
 
     private static void advance(MinecraftServer server) {
