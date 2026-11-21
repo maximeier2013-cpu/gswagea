@@ -192,7 +192,7 @@ public final class RandomChaos implements ModInitializer {
 
         // The integrated Minecraft/NoRisk server cannot safely replace its open save.
         // Only the player state and RandomChaos are reset here. Terrain remains unchanged.
-        var spawn = server.getSpawnPos().pos();
+        var spawn = server.getRespawnData().pos();
         String spawnCoords = spawn.getX() + " " + spawn.getY() + " " + spawn.getZ();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             CommandSourceStack source = player.createCommandSourceStack();
