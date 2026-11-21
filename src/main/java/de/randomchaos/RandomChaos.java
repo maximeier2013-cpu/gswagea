@@ -29,6 +29,7 @@ public final class RandomChaos implements ModInitializer {
     private static final Random RNG = new Random();
     private static MinecraftServer activeServer;
     private static long ticks;
+    private static long hudTicks;
     private static int stage;
     private static boolean running = false;
     private static int currentSpeed = 3;
@@ -63,6 +64,7 @@ public final class RandomChaos implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             activeServer = server;
             ticks = 0;
+            hudTicks = 0;
             stage = 0;
             running = false;
             currentSpeed = 3;
@@ -109,8 +111,14 @@ public final class RandomChaos implements ModInitializer {
                         ctx.getSource().sendFailure(Component.literal("Challenge läuft bereits. Zeit: " + formatTime(ticks)));
                         return 0;
                     }
+                    // Activate fixed block drops as soon as the challenge starts.
+                    // Later stages still unlock at five-minute intervals.
+                    if (stage == 0) {
+                        stage = 1;
+                        announce(ctx.getSource().getServer(), "STUFE 1/6 FREIGESCHALTET: " + STAGES[stage]);
+                    }
                     running = true;
-                    announce(ctx.getSource().getServer(), "Challenge gestartet! Viel Erfolg! Timer läuft.");
+                    announce(ctx.getSource().getServer(), "Challenge gestartet! Timer läuft; Block-Drops sind aktiv.");
                     return Command.SINGLE_SUCCESS;
                 }))
                 .then(Commands.literal("restart").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
@@ -149,15 +157,24 @@ public final class RandomChaos implements ModInitializer {
     }
 
     private static void onTick(MinecraftServer server) {
-        if (!running || server.getPlayerList().getPlayers().isEmpty()) return;
+        if (server.getPlayerList().getPlayers().isEmpty()) return;
+
+        // Always show the HUD, even before /challenge start and after /challenge restart.
+        // Refresh every half second so the actionbar never disappears.
+        hudTicks++;
+        if (hudTicks % 10 == 0) {
+            String state = running ? "§aLÄUFT" : (ticks == 0 ? "§7BEREIT" : "§6PAUSIERT");
+            String hud = "§bRandomChaos §8| §f" + formatTime(ticks)
+                    + " §8| §eStufe " + stage + "/6 §8| " + state;
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                player.displayClientMessage(Component.literal(hud), true);
+            }
+        }
+
+        if (!running) return;
         ticks++;
         if (ticks % STAGE_TICKS == 0) advance(server);
         if (ticks % 20 != 0) return;
-
-        String title = "§bRandomChaos §7| §f" + formatTime(ticks) + " §7| §eStufe " + stage + "/6";
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            player.displayClientMessage(Component.literal(title), true);
-        }
 
         if (stage >= 4 && RNG.nextInt(30) == 0) {
             List<ServerPlayer> players = server.getPlayerList().getPlayers();
@@ -203,7 +220,7 @@ public final class RandomChaos implements ModInitializer {
             execute(server, source, "gamemode survival @s");
             execute(server, source, "execute in minecraft:overworld run tp @s " + spawnCoords);
             execute(server, source, "spawnpoint @s " + spawnCoords);
-            player.displayClientMessage(Component.literal("§bRandomChaos §7| §f00:00:00 §7| §eStufe 0/6"), true);
+            player.displayClientMessage(Component.literal("§bRandomChaos §8| §f00:00:00 §8| §eStufe 0/6 §8| §7BEREIT"), true);
         }
         execute(server, server.createCommandSourceStack(), "gamerule randomTickSpeed 3");
         execute(server, server.createCommandSourceStack(), "weather clear");
