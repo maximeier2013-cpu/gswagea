@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "randomchaos",
+  "version": "${version}",
+  "name": "Random Chaos",
+  "description": "A survival world that becomes more random over time.",
+  "authors": ["Random Chaos Project"],
+  "environment": "*",
+  "entrypoints": {
+    "main": ["de.randomchaos.RandomChaos"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
