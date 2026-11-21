@@ -14,6 +14,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
@@ -78,7 +79,7 @@ public final class RandomChaos implements ModInitializer {
         // Only actual block/entity loot tables, not chests or other loot sources.
         LootTableEvents.MODIFY_DROPS.register((holder, context, drops) -> {
             if (!running || activeServer == null || drops.isEmpty()) return;
-            String path = holder.unwrapKey().map(key -> key.location().getPath()).orElse("");
+            String path = holder.unwrapKey().map(key -> key.identifier().getPath()).orElse("");
             boolean block = path.startsWith("blocks/");
             boolean mob = path.startsWith("entities/");
             if ((!block || stage < 1) && (!mob || stage < 2)) return;
@@ -100,17 +101,17 @@ public final class RandomChaos implements ModInitializer {
                         + " | " + ((STAGE_TICKS - (ticks % STAGE_TICKS)) / 20) + "s bis zur nächsten Stufe"), false);
                     return Command.SINGLE_SUCCESS;
                 }))
-                .then(Commands.literal("pause").requires(source -> source.hasPermission(2)).executes(ctx -> {
+                .then(Commands.literal("pause").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
                     running = false;
                     ctx.getSource().sendSuccess(() -> Component.literal("Chaos pausiert."), true);
                     return Command.SINGLE_SUCCESS;
                 }))
-                .then(Commands.literal("resume").requires(source -> source.hasPermission(2)).executes(ctx -> {
+                .then(Commands.literal("resume").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
                     running = true;
                     ctx.getSource().sendSuccess(() -> Component.literal("Chaos läuft wieder."), true);
                     return Command.SINGLE_SUCCESS;
                 }))
-                .then(Commands.literal("next").requires(source -> source.hasPermission(2)).executes(ctx -> {
+                .then(Commands.literal("next").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> {
                     advance(ctx.getSource().getServer());
                     return Command.SINGLE_SUCCESS;
                 }))
@@ -173,6 +174,6 @@ public final class RandomChaos implements ModInitializer {
     }
 
     private static void execute(MinecraftServer server, CommandSourceStack source, String command) {
-        server.getCommands().performPrefixedCommand(source.withPermission(2).withSuppressedOutput(), command);
+        server.getCommands().performPrefixedCommand(source.withPermission(LevelBasedPermissionSet.GAMEMASTER).withSuppressedOutput(), command);
     }
 }
